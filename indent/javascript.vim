@@ -64,6 +64,8 @@ let s:var_stmt = '^\s*var'
 let s:comma_first = '^\s*,'
 let s:comma_last = ',\s*$'
 
+let s:opening = '[[({:]\s*$'
+
 let s:ternary = '^\s\+[?|:]'
 let s:ternary_q = '^\s\+?'
 
@@ -160,15 +162,19 @@ function s:InMultiVarStatement(lnum)
     let line = getline(lnum)
 
     " if the line is a js keyword
-    if (line =~ s:js_keywords)
+    if line =~ s:js_keywords
       " check if the line is a var stmt
       " if the line has a comma first or comma last then we can assume that we
       " are in a multiple var statement
-      if (line =~ s:var_stmt)
-        return lnum
+      if line =~ s:var_stmt
+        if line =~ s:comma_last
+          return lnum
+        endif
       endif
 
       " other js keywords, not a var
+      return 0
+    elseif line =~ s:opening
       return 0
     endif
 
@@ -189,7 +195,7 @@ function s:GetVarIndent(lnum)
     let line = s:RemoveTrailingComments(getline(prev_lnum))
 
     " if the previous line doesn't end in a comma, return to regular indent
-    if (line !~ s:comma_last)
+    if line !~ s:comma_last
       return indent(prev_lnum) - &sw
     else
       return indent(lvar) + &sw
@@ -354,12 +360,25 @@ function GetJavascriptIndent()
   if s:IsInMultilineComment(v:lnum, 1) && !s:IsLineComment(v:lnum, 1)
     return cindent(v:lnum)
   endif
-
+  
   " Check for multiple var assignments
-"  let var_indent = s:GetVarIndent(v:lnum)
-"  if var_indent >= 0
-"    return var_indent
-"  endif
+  let var_indent = s:GetVarIndent(v:lnum)
+  if getline(prevline) =~ s:comma_last && line =~ '[;,]\s*$'
+    if var_indent >= 0
+      return var_indent + &sw
+    else
+      return indent(prevline)
+    endif
+  else
+    if getline(prevline) =~ s:opening
+      return indent(prevline) + &sw
+    else
+      if line =~ s:opening || line =~ s:js_keywords
+        return indent(v:lnum)
+      endif
+      return var_indent - &sw
+    endif
+  endif
 
   " 3.3. Work on the previous line. {{{2
   " -------------------------------
